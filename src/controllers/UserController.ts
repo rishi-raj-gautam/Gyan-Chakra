@@ -1,0 +1,105 @@
+import { Response, NextFunction } from 'express';
+import { AuthRequest } from '../middlewares/auth.middleware';
+import { userRepository } from '../repositories/UserRepository';
+import { ApiError } from '../utils/apiError';
+import { sendSuccess } from '../utils/response';
+import { getPagination } from '../utils/paginate';
+import { Winner } from '../models/Winner';
+import { DailyQuizParticipation } from '../models/DailyQuizParticipation';
+import { MegaChallengeParticipation } from '../models/MegaChallengeParticipation';
+
+export class UserController {
+  async getProfile(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const user = await userRepository.findById(req.user!.userId);
+      if (!user) throw ApiError.notFound('User not found');
+      return sendSuccess(res, 'Profile fetched', user);
+    } catch (e) { next(e); }
+  }
+
+  async updateProfile(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const allowedFields = ['name', 'email', 'city', 'aboutMe', 'dateOfBirth', 'fcmToken'];
+      const updates: Record<string, any> = {};
+      allowedFields.forEach((f) => { if (req.body[f] !== undefined) updates[f] = req.body[f]; });
+
+      const user = await userRepository.update(req.user!.userId, updates);
+      return sendSuccess(res, 'Profile updated', user);
+    } catch (e) { next(e); }
+  }
+
+  async deleteAccount(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      await userRepository.softDelete(req.user!.userId);
+      return sendSuccess(res, 'Account deleted successfully');
+    } catch (e) { next(e); }
+  }
+
+  async getStats(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const user = await userRepository.findById(req.user!.userId);
+      if (!user) throw ApiError.notFound('User not found');
+      return sendSuccess(res, 'Stats fetched', {
+        totalContestsPlayed: user.totalContestsPlayed,
+        totalContestsWon: user.totalContestsWon,
+        walletBalance: user.walletBalance,
+        lifetimeEarnings: user.lifetimeEarnings,
+      });
+    } catch (e) { next(e); }
+  }
+
+  async getContestHistory(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { skip, limit, page } = getPagination(req);
+      const userId = req.user!.userId;
+
+      const [quizHistory, challengeHistory] = await Promise.all([
+        DailyQuizParticipation.find({ userId })
+          .populate('quizId', 'title rewardAmount startTime')
+          .sort({ submittedAt: -1 })
+          .skip(skip)
+          .limit(limit),
+        MegaChallengeParticipation.find({ userId })
+          .populate('challengeId', 'title rewardAmount startDate')
+          .sort({ submittedAt: -1 })
+          .skip(skip)
+          .limit(limit),
+      ]);
+
+      return sendSuccess(res, 'History fetched', { quizHistory, challengeHistory });
+    } catch (e) { next(e); }
+  }
+
+  // Admin routes
+  async getAllUsers(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { skip, limit, page } = getPagination(req);
+      const { status, search } = req.query;
+
+      const filter: any = {};
+      if (status) filter.status = status;
+      if (search) {
+        filter.$or = [
+          { name: { $regex: search, $options: 'i' } },
+          { mobile: { $regex: search, $options: 'i' } },
+          { email: { $regex: search, $options: 'i' } },
+        ];
+      }
+
+      const { users, total } = await userRepository.findAll(filter, skip, limit);
+      return sendSuccess(res, 'Users fetched', { users, page, limit, total, totalPages: Math.ceil(total / limit) });
+    } catch (e) { next(e); }
+  }
+
+  async updateUserStatus(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { id } = req.params;
+      const { status, remarks } = req.body;
+      const user = await userRepository.update(id, { status });
+      if (!user) throw ApiError.notFound('User not found');
+      return sendSuccess(res, `User ${status} successfully`, user);
+    } catch (e) { next(e); }
+  }
+}
+
+export const userController = new UserController();
