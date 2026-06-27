@@ -2,10 +2,19 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { dailyQuizService } from '../services/DailyQuizService';
 import { winnerService } from '../services/WinnerService';
 import { authMiddleware, optionalAuth, AuthRequest } from '../middlewares/auth.middleware';
+import { validate } from '../middlewares/validation.middleware';
 import { sendSuccess } from '../utils/response';
 import { getPagination } from '../utils/paginate';
+import { z } from 'zod';
 
 const router = Router();
+
+const quizSubmitSchema = z.object({
+  body: z.object({
+    quizId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid quiz ID format'),
+    selectedAnswerIndex: z.number().int().min(-1).max(3),
+  }),
+});
 
 /**
  * @swagger
@@ -44,7 +53,7 @@ router.get('/active', optionalAuth, async (req: AuthRequest, res: Response, next
  *       400: { description: Invalid submission or already submitted }
  *       401: { description: Unauthorized }
  */
-router.post('/submit', authMiddleware, async (req: AuthRequest, res: Response, next: NextFunction) => {
+router.post('/submit', authMiddleware, validate(quizSubmitSchema), async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { quizId, selectedAnswerIndex } = req.body;
     const result = await dailyQuizService.submitAnswer(req.user!.userId, quizId, selectedAnswerIndex);

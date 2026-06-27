@@ -4,8 +4,9 @@ import { Transaction, TransactionType, TransactionCategory, TransactionStatus } 
 import { userRepository } from '../repositories/UserRepository';
 import { dailyQuizRepository } from '../repositories/DailyQuizRepository';
 import { megaChallengeRepository } from '../repositories/MegaChallengeRepository';
+import { notificationService } from './NotificationService';
 import { ApiError } from '../utils/apiError';
-import { auditLogger } from '../utils/logger';
+import { logger, auditLogger } from '../utils/logger';
 import crypto from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -92,6 +93,15 @@ export class WinnerService {
       adminId,
     });
 
+    // Send push notifications
+    await notificationService.sendWinnerAnnounced(
+      selectedUser.name,
+      quiz.title,
+      'daily_quiz',
+      quiz.rewardAmount,
+      userId
+    ).catch((err) => logger.error('[WinnerService] FCM notification failed:', err));
+
     return winner;
   }
 
@@ -141,6 +151,15 @@ export class WinnerService {
       details: { drawId, winnerId: userId, poolSize: shortlisted.length },
       ipAddress,
     });
+
+    // Send push notifications
+    await notificationService.sendWinnerAnnounced(
+      selectedUser.name,
+      challenge.title,
+      'mega_challenge',
+      challenge.rewardAmount,
+      userId
+    ).catch((err) => logger.error('[WinnerService] FCM notification failed:', err));
 
     return winner;
   }

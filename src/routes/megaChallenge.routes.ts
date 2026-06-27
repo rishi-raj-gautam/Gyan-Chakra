@@ -2,11 +2,20 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { megaChallengeService } from '../services/MegaChallengeService';
 import { winnerService } from '../services/WinnerService';
 import { authMiddleware, optionalAuth, AuthRequest } from '../middlewares/auth.middleware';
+import { validate } from '../middlewares/validation.middleware';
 import { sendSuccess } from '../utils/response';
 import { ContestType } from '../models/Winner';
 import { Winner } from '../models/Winner';
+import { z } from 'zod';
 
 const router = Router();
+
+const challengeSubmitSchema = z.object({
+  body: z.object({
+    challengeId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid challenge ID format'),
+    answers: z.array(z.number().int().min(-1).max(3)),
+  }),
+});
 
 /**
  * @swagger
@@ -45,7 +54,7 @@ router.get('/active', optionalAuth, async (req: AuthRequest, res: Response, next
  *       400: { description: Invalid submission or already submitted }
  *       401: { description: Unauthorized }
  */
-router.post('/submit', authMiddleware, async (req: AuthRequest, res: Response, next: NextFunction) => {
+router.post('/submit', authMiddleware, validate(challengeSubmitSchema), async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { challengeId, answers } = req.body;
     const result = await megaChallengeService.submitAnswers(req.user!.userId, challengeId, answers);

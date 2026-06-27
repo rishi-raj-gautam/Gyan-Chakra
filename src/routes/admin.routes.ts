@@ -249,4 +249,29 @@ router.put('/settings', (req, res, next) => adminController.updateSettings(req a
  */
 router.get('/audit-logs', (req, res, next) => adminController.getAuditLogs(req as any, res, next));
 
+/**
+ * @swagger
+ * /admin/notifications/broadcast:
+ *   post:
+ *     tags: [Admin]
+ *     summary: Broadcast push notifications to an audience segment (Admin only)
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [title, message, audience]
+ *             properties:
+ *               title: { type: string }
+ *               message: { type: string }
+ *               audience: { type: string, enum: [all, quiz_participants, challenge_participants] }
+ *     responses:
+ *       200: { description: Broadcast dispatched successfully }
+ *       400: { description: Bad request }
+ *       401: { description: Unauthorized }
+ *       403: { description: Forbidden }
+ */
+router.post('/notifications/broadcast', (req, res, next) => adminController.broadcastNotification(req as any, res, next));
+
 export default router;

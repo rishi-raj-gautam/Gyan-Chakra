@@ -1,6 +1,7 @@
 import cron from 'node-cron';
 import { DailyQuiz, QuizStatus } from '../models/DailyQuiz';
 import { MegaChallenge, ChallengeStatus } from '../models/MegaChallenge';
+import { notificationService } from '../services/NotificationService';
 import { logger } from '../utils/logger';
 
 export const initCronJobs = () => {
@@ -14,6 +15,11 @@ export const initCronJobs = () => {
       for (const quiz of toActivate) {
         await DailyQuiz.findByIdAndUpdate(quiz.id, { status: QuizStatus.ACTIVE });
         logger.info(`[CRON] Activated daily quiz: ${quiz.title}`);
+        await notificationService.sendQuizStarted({
+          id: quiz.id || quiz._id.toString(),
+          title: quiz.title,
+          rewardAmount: quiz.rewardAmount,
+        });
       }
     } catch (e) {
       logger.error('[CRON] Quiz activation error:', e);
@@ -46,6 +52,11 @@ export const initCronJobs = () => {
       for (const c of toOpen) {
         await MegaChallenge.findByIdAndUpdate(c.id, { status: ChallengeStatus.OPEN });
         logger.info(`[CRON] Opened mega challenge: ${c.title}`);
+        await notificationService.sendChallengeOpened({
+          id: c.id || c._id.toString(),
+          title: c.title,
+          rewardAmount: c.rewardAmount,
+        });
       }
     } catch (e) {
       logger.error('[CRON] Mega challenge open error:', e);

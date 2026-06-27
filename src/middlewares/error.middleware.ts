@@ -24,6 +24,12 @@ export const errorMiddleware = (
     return;
   }
 
+  // Mongoose CastError (e.g. invalid ObjectId)
+  if (err.name === 'CastError') {
+    res.status(400).json({ success: false, message: `Invalid ID value for field ${(err as any).path}` });
+    return;
+  }
+
   // MongoDB duplicate key
   if ((err as any).code === 11000) {
     const field = Object.keys((err as any).keyValue || {})[0];

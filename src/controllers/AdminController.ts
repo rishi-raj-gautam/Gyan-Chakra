@@ -4,6 +4,8 @@ import { dailyQuizService } from '../services/DailyQuizService';
 import { megaChallengeService } from '../services/MegaChallengeService';
 import { winnerService } from '../services/WinnerService';
 import { walletService } from '../services/WalletService';
+import { notificationService } from '../services/NotificationService';
+import { ApiError } from '../utils/apiError';
 import { sendSuccess } from '../utils/response';
 import { getPagination } from '../utils/paginate';
 import { User } from '../models/User';
@@ -143,6 +145,20 @@ export class AdminController {
         AuditLog.countDocuments(),
       ]);
       return sendSuccess(res, 'Audit logs fetched', { logs, total });
+    } catch (e) { next(e); }
+  }
+
+  // Push notifications
+  async broadcastNotification(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { title, message, audience } = req.body;
+      if (!title || !message || !audience) {
+        throw ApiError.badRequest('Title, message, and audience are required');
+      }
+
+      await notificationService.sendToAudience(audience, title, message);
+
+      return sendSuccess(res, 'Notification broadcast completed successfully');
     } catch (e) { next(e); }
   }
 }

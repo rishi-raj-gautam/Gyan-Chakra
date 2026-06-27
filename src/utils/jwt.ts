@@ -1,6 +1,8 @@
 import jwt from 'jsonwebtoken';
 import { env } from '../config/env';
 
+import { ApiError } from './apiError';
+
 export interface JwtPayload {
   userId: string;
   role: string;
@@ -20,16 +22,22 @@ export const signRefreshToken = (userId: string, role: string): string =>
 export const verifyAccessToken = (token: string): JwtPayload => {
   try {
     return jwt.verify(token, env.jwt.secret) as JwtPayload;
-  } catch {
-    throw new Error('Invalid or expired access token');
+  } catch (err: any) {
+    if (err.name === 'TokenExpiredError') {
+      throw new ApiError('Access token expired', 401);
+    }
+    throw new ApiError('Invalid access token', 401);
   }
 };
 
 export const verifyRefreshToken = (token: string): JwtPayload => {
   try {
     return jwt.verify(token, env.jwt.refreshSecret) as JwtPayload;
-  } catch {
-    throw new Error('Invalid or expired refresh token');
+  } catch (err: any) {
+    if (err.name === 'TokenExpiredError') {
+      throw new ApiError('Refresh token expired', 401);
+    }
+    throw new ApiError('Invalid refresh token', 401);
   }
 };
 
