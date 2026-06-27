@@ -6,6 +6,23 @@ import { getPagination } from '../utils/paginate';
 
 const router = Router();
 
+/**
+ * @swagger
+ * /notifications:
+ *   get:
+ *     tags: [Notifications]
+ *     summary: Get notifications for logged-in user
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 20 }
+ *     responses:
+ *       200: { description: Notifications list fetched successfully }
+ *       401: { description: Unauthorized }
+ */
 router.get('/', authMiddleware, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { skip, limit } = getPagination(req);
@@ -18,6 +35,21 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response, next: Ne
   } catch (e) { next(e); }
 });
 
+/**
+ * @swagger
+ * /notifications/{id}/read:
+ *   put:
+ *     tags: [Notifications]
+ *     summary: Mark a specific notification as read
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200: { description: Notification marked as read successfully }
+ *       401: { description: Unauthorized }
+ */
 router.put('/:id/read', authMiddleware, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     await Notification.findOneAndUpdate(
@@ -28,6 +60,16 @@ router.put('/:id/read', authMiddleware, async (req: AuthRequest, res: Response, 
   } catch (e) { next(e); }
 });
 
+/**
+ * @swagger
+ * /notifications/read-all:
+ *   put:
+ *     tags: [Notifications]
+ *     summary: Mark all unread notifications for user as read
+ *     responses:
+ *       200: { description: All notifications marked as read successfully }
+ *       401: { description: Unauthorized }
+ */
 router.put('/read-all', authMiddleware, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     await Notification.updateMany({ userId: req.user!.userId, isRead: false }, { isRead: true });

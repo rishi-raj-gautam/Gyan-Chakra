@@ -55,7 +55,7 @@ export class UserController {
 
       const [quizHistory, challengeHistory] = await Promise.all([
         DailyQuizParticipation.find({ userId })
-          .populate('quizId', 'title rewardAmount startTime')
+          .populate('quizId', 'title rewardAmount startTime winnerId')
           .sort({ submittedAt: -1 })
           .skip(skip)
           .limit(limit),

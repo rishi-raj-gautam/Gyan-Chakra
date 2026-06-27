@@ -6,6 +6,16 @@ import { getPagination } from '../utils/paginate';
 
 const router = Router();
 
+/**
+ * @swagger
+ * /wallet/balance:
+ *   get:
+ *     tags: [Wallet]
+ *     summary: Get user wallet balance and lifetime earnings
+ *     responses:
+ *       200: { description: Balance fetched successfully }
+ *       401: { description: Unauthorized }
+ */
 router.get('/balance', authMiddleware, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const data = await walletService.getBalance(req.user!.userId);
@@ -13,6 +23,23 @@ router.get('/balance', authMiddleware, async (req: AuthRequest, res: Response, n
   } catch (e) { next(e); }
 });
 
+/**
+ * @swagger
+ * /wallet/transactions:
+ *   get:
+ *     tags: [Wallet]
+ *     summary: Get user transaction history
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 20 }
+ *     responses:
+ *       200: { description: Transactions fetched successfully }
+ *       401: { description: Unauthorized }
+ */
 router.get('/transactions', authMiddleware, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { skip, limit } = getPagination(req);

@@ -7,7 +7,15 @@ import { getPagination } from '../utils/paginate';
 
 const router = Router();
 
-// Get active quiz (public, but tracks if user has participated)
+/**
+ * @swagger
+ * /daily-quiz/active:
+ *   get:
+ *     tags: [Daily Quiz]
+ *     summary: Get active daily quiz for the user
+ *     responses:
+ *       200: { description: Active quiz fetched successfully }
+ */
 router.get('/active', optionalAuth, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const quiz = await dailyQuizService.getActiveQuiz(req.user?.userId);
@@ -15,7 +23,27 @@ router.get('/active', optionalAuth, async (req: AuthRequest, res: Response, next
   } catch (e) { next(e); }
 });
 
-// Submit answer (authenticated)
+/**
+ * @swagger
+ * /daily-quiz/submit:
+ *   post:
+ *     tags: [Daily Quiz]
+ *     summary: Submit answer for the active daily quiz
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [quizId, selectedAnswerIndex]
+ *             properties:
+ *               quizId: { type: string }
+ *               selectedAnswerIndex: { type: integer }
+ *     responses:
+ *       200: { description: Answer submitted successfully }
+ *       400: { description: Invalid submission or already submitted }
+ *       401: { description: Unauthorized }
+ */
 router.post('/submit', authMiddleware, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { quizId, selectedAnswerIndex } = req.body;
@@ -24,7 +52,22 @@ router.post('/submit', authMiddleware, async (req: AuthRequest, res: Response, n
   } catch (e) { next(e); }
 });
 
-// Get quiz result
+/**
+ * @swagger
+ * /daily-quiz/{id}/result:
+ *   get:
+ *     tags: [Daily Quiz]
+ *     summary: Get quiz submission result details
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200: { description: Result details fetched successfully }
+ *       401: { description: Unauthorized }
+ *       404: { description: Result not found }
+ */
 router.get('/:id/result', authMiddleware, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const result = await dailyQuizService.getQuizResult(req.params.id, req.user!.userId);
@@ -32,7 +75,16 @@ router.get('/:id/result', authMiddleware, async (req: AuthRequest, res: Response
   } catch (e) { next(e); }
 });
 
-// Get recent winners (public)
+/**
+ * @swagger
+ * /daily-quiz/winners:
+ *   get:
+ *     tags: [Daily Quiz]
+ *     security: []
+ *     summary: Get list of recent daily quiz winners
+ *     responses:
+ *       200: { description: Winners list fetched successfully }
+ */
 router.get('/winners', async (_req: Request, res: Response, next: NextFunction) => {
   try {
     const winners = await winnerService.getRecentWinners(10);
@@ -40,7 +92,24 @@ router.get('/winners', async (_req: Request, res: Response, next: NextFunction) 
   } catch (e) { next(e); }
 });
 
-// Get all quizzes (admin)
+/**
+ * @swagger
+ * /daily-quiz:
+ *   get:
+ *     tags: [Daily Quiz Admin]
+ *     summary: List all quizzes (Admin only)
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 20 }
+ *     responses:
+ *       200: { description: Quizzes list fetched successfully }
+ *       401: { description: Unauthorized }
+ *       403: { description: Forbidden }
+ */
 router.get('/', authMiddleware, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { skip, limit } = getPagination(req);
