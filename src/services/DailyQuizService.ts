@@ -2,10 +2,20 @@ import { dailyQuizRepository } from '../repositories/DailyQuizRepository';
 import { ApiError } from '../utils/apiError';
 import { QuizStatus } from '../models/DailyQuiz';
 import { userRepository } from '../repositories/UserRepository';
+import { notificationService } from './NotificationService';
+import { logger } from '../utils/logger';
 
 export class DailyQuizService {
   async createQuiz(data: any, adminId: string) {
-    const quiz = await dailyQuizRepository.create({ ...data, createdBy: adminId, status: QuizStatus.SCHEDULED });
+    const status = data.status || QuizStatus.SCHEDULED;
+    const quiz = await dailyQuizRepository.create({ ...data, createdBy: adminId, status });
+    if (status === QuizStatus.ACTIVE) {
+      await notificationService.sendQuizStarted({
+        id: quiz.id || quiz._id.toString(),
+        title: quiz.title,
+        rewardAmount: quiz.rewardAmount,
+      }).catch((err) => logger.error('[DailyQuizService] Failed to send active quiz notification:', err));
+    }
     return quiz;
   }
 
@@ -15,7 +25,15 @@ export class DailyQuizService {
     if (quiz.status === QuizStatus.ACTIVE || quiz.status === QuizStatus.COMPLETED) {
       throw ApiError.badRequest('Cannot edit an active or completed quiz');
     }
-    return dailyQuizRepository.update(id, data);
+    const updatedQuiz = await dailyQuizRepository.update(id, data);
+    if (updatedQuiz && data.status === QuizStatus.ACTIVE) {
+      await notificationService.sendQuizStarted({
+        id: updatedQuiz.id || updatedQuiz._id.toString(),
+        title: updatedQuiz.title,
+        rewardAmount: updatedQuiz.rewardAmount,
+      }).catch((err) => logger.error('[DailyQuizService] Failed to send active quiz notification:', err));
+    }
+    return updatedQuiz;
   }
 
   async deleteQuiz(id: string) {

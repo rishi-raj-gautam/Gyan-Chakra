@@ -187,6 +187,10 @@ export class WinnerService {
       balanceBefore,
       balanceAfter: balanceBefore + amount,
     });
+
+    await notificationService.sendRewardCredited(userId, amount, description).catch((err) =>
+      logger.error(`[WinnerService] Failed to send reward notification for user ${userId}:`, err)
+    );
   }
 
   async getRecentWinners(limit = 10): Promise<IWinner[]> {

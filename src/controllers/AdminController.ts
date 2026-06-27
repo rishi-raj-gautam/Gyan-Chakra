@@ -151,14 +151,14 @@ export class AdminController {
   // Push notifications
   async broadcastNotification(req: AuthRequest, res: Response, next: NextFunction) {
     try {
-      const { title, message, audience } = req.body;
+      const { title, message, audience, targetUserIds } = req.body;
       if (!title || !message || !audience) {
         throw ApiError.badRequest('Title, message, and audience are required');
       }
 
-      await notificationService.sendToAudience(audience, title, message);
+      const report = await notificationService.sendToAudience(audience, title, message, targetUserIds);
 
-      return sendSuccess(res, 'Notification broadcast completed successfully');
+      return sendSuccess(res, 'Notification broadcast completed successfully', report);
     } catch (e) { next(e); }
   }
 }

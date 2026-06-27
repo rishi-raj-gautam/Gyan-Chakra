@@ -2,13 +2,23 @@ import { megaChallengeRepository } from '../repositories/MegaChallengeRepository
 import { ApiError } from '../utils/apiError';
 import { ChallengeStatus } from '../models/MegaChallenge';
 import { userRepository } from '../repositories/UserRepository';
+import { notificationService } from './NotificationService';
+import { logger } from '../utils/logger';
 
 export class MegaChallengeService {
   async createChallenge(data: any, adminId: string) {
     if (!data.questions || data.questions.length !== 10) {
       throw ApiError.badRequest('Mega Challenge must have exactly 10 questions');
     }
-    return megaChallengeRepository.create({ ...data, createdBy: adminId });
+    const challenge = await megaChallengeRepository.create({ ...data, createdBy: adminId });
+    if (challenge.status === ChallengeStatus.OPEN) {
+      await notificationService.sendChallengeOpened({
+        id: challenge.id || challenge._id.toString(),
+        title: challenge.title,
+        rewardAmount: challenge.rewardAmount,
+      }).catch((err) => logger.error('[MegaChallengeService] Failed to send challenge open notification:', err));
+    }
+    return challenge;
   }
 
   async updateChallenge(id: string, data: any) {
@@ -17,7 +27,15 @@ export class MegaChallengeService {
     if (challenge.status === ChallengeStatus.CLOSED || challenge.status === ChallengeStatus.COMPLETED) {
       throw ApiError.badRequest('Cannot edit a closed or completed challenge');
     }
-    return megaChallengeRepository.update(id, data);
+    const updated = await megaChallengeRepository.update(id, data);
+    if (updated && data.status === ChallengeStatus.OPEN && challenge.status !== ChallengeStatus.OPEN) {
+      await notificationService.sendChallengeOpened({
+        id: updated.id || updated._id.toString(),
+        title: updated.title,
+        rewardAmount: updated.rewardAmount,
+      }).catch((err) => logger.error('[MegaChallengeService] Failed to send challenge open notification:', err));
+    }
+    return updated;
   }
 
   async deleteChallenge(id: string) {

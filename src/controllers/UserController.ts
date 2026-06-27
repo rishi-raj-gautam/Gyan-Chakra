@@ -7,6 +7,9 @@ import { getPagination } from '../utils/paginate';
 import { Winner } from '../models/Winner';
 import { DailyQuizParticipation } from '../models/DailyQuizParticipation';
 import { MegaChallengeParticipation } from '../models/MegaChallengeParticipation';
+import { notificationService } from '../services/NotificationService';
+import { NotificationType } from '../models/Notification';
+import { logger } from '../utils/logger';
 
 export class UserController {
   async getProfile(req: AuthRequest, res: Response, next: NextFunction) {
@@ -94,9 +97,32 @@ export class UserController {
   async updateUserStatus(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const { id } = req.params;
-      const { status, remarks } = req.body;
+      const { status } = req.body;
       const user = await userRepository.update(id, { status });
       if (!user) throw ApiError.notFound('User not found');
+
+      // Send status change notification to user
+      let notifTitle = '';
+      let notifBody = '';
+      const notifType = NotificationType.SYSTEM;
+
+      if (status === 'active') {
+        notifTitle = 'Account Approved! ✅';
+        notifBody = 'Congratulations, your account has been approved and you can now participate in contests!';
+      } else if (status === 'suspended') {
+        notifTitle = 'Account Suspended ⚠️';
+        notifBody = 'Your account has been suspended. Please contact support for assistance.';
+      } else if (status === 'blocked') {
+        notifTitle = 'Account Blocked ❌';
+        notifBody = 'Your account has been blocked due to policy violations.';
+      }
+
+      if (notifTitle && notifBody) {
+        await notificationService.sendToUser(id, notifType, notifTitle, notifBody).catch((err) =>
+          logger.error(`[UserController] Failed to send status notification to user ${id}:`, err)
+        );
+      }
+
       return sendSuccess(res, `User ${status} successfully`, user);
     } catch (e) { next(e); }
   }

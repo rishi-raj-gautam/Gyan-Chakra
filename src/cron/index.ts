@@ -1,6 +1,7 @@
 import cron from 'node-cron';
 import { DailyQuiz, QuizStatus } from '../models/DailyQuiz';
 import { MegaChallenge, ChallengeStatus } from '../models/MegaChallenge';
+import { Settings } from '../models/Settings';
 import { notificationService } from '../services/NotificationService';
 import { logger } from '../utils/logger';
 
@@ -83,6 +84,50 @@ export const initCronJobs = () => {
   cron.schedule('0 0 * * *', async () => {
     logger.info('[CRON] Daily analytics aggregation running...');
     // Future: compute daily stats and store in analytics collection
+  });
+
+  // Every minute: process scheduled notifications
+  cron.schedule('* * * * *', async () => {
+    try {
+      const doc = await Settings.findOne({ key: 'notifications_schedule' });
+      if (!doc) return;
+
+      const list = doc.value as any[];
+      if (!Array.isArray(list) || list.length === 0) return;
+
+      let updated = false;
+      const now = new Date();
+
+      for (const notification of list) {
+        if (notification.status === 'scheduled' && notification.scheduleTime) {
+          const schedTime = new Date(notification.scheduleTime);
+          if (schedTime <= now) {
+            logger.info(`[CRON] Dispatching scheduled notification: ${notification.title}`);
+            const report = await notificationService.sendToAudience(
+              notification.audience,
+              notification.title,
+              notification.message,
+              notification.targetUserIds
+            );
+
+            notification.status = 'sent';
+            notification.recipientCount = report.recipientCount;
+            notification.successCount = report.successCount;
+            notification.failureCount = report.failureCount;
+            notification.sentAt = now.toISOString();
+            updated = true;
+          }
+        }
+      }
+
+      if (updated) {
+        doc.markModified('value');
+        await doc.save();
+        logger.info('[CRON] Scheduled notifications list updated in settings');
+      }
+    } catch (e) {
+      logger.error('[CRON] Scheduled notification processing error:', e);
+    }
   });
 
   logger.info('✅ Cron jobs initialized');

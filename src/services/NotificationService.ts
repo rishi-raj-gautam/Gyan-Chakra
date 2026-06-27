@@ -103,8 +103,10 @@ export class NotificationService {
     title: string,
     body: string,
     data?: Record<string, unknown>
-  ): Promise<void> {
-    if (userIds.length === 0) return;
+  ): Promise<{ successCount: number; failureCount: number; recipientCount: number }> {
+    if (userIds.length === 0) {
+      return { successCount: 0, failureCount: 0, recipientCount: 0 };
+    }
 
     logger.info(`[NotificationService] Sending batch notifications to ${userIds.length} users: "${title}"`);
 
@@ -113,7 +115,7 @@ export class NotificationService {
 
     if (!isFirebaseInitialized || !messaging) {
       logger.warn('[NotificationService] Firebase not initialized. Stored in DB only.');
-      return;
+      return { successCount: 0, failureCount: userIds.length, recipientCount: userIds.length };
     }
 
     const users = await User.find({ _id: { $in: userIds }, status: UserStatus.ACTIVE })
@@ -121,12 +123,19 @@ export class NotificationService {
       .lean();
 
     const tokens = users.map((u) => u.fcmToken).filter((t): t is string => !!t);
+    const noTokenCount = userIds.length - tokens.length;
+
     if (tokens.length === 0) {
       logger.warn('[NotificationService] No active user tokens found for specified users.');
-      return;
+      return { successCount: 0, failureCount: userIds.length, recipientCount: userIds.length };
     }
 
-    await this.sendMulticastFCM(tokens, title, body, data);
+    const report = await this.sendMulticastFCM(tokens, title, body, data);
+    return {
+      successCount: report.successCount,
+      failureCount: report.failureCount + noTokenCount,
+      recipientCount: userIds.length,
+    };
   }
 
   /**
@@ -136,7 +145,7 @@ export class NotificationService {
     title: string,
     body: string,
     data?: Record<string, unknown>
-  ): Promise<void> {
+  ): Promise<{ successCount: number; failureCount: number; recipientCount: number }> {
     logger.info(`[NotificationService] Starting global broadcast: "${title}"`);
 
     // Find all active users
@@ -146,7 +155,7 @@ export class NotificationService {
 
     if (users.length === 0) {
       logger.warn('[NotificationService] No active users to broadcast to.');
-      return;
+      return { successCount: 0, failureCount: 0, recipientCount: 0 };
     }
 
     // Save notifications to DB for all users (runs in parallel chunks to handle large db sizes)
@@ -159,30 +168,45 @@ export class NotificationService {
 
     if (!isFirebaseInitialized || !messaging) {
       logger.warn('[NotificationService] Firebase not initialized. Global broadcast saved to DB only.');
-      return;
+      return { successCount: 0, failureCount: users.length, recipientCount: users.length };
     }
 
     const tokens = users.map((u) => u.fcmToken).filter((t): t is string => !!t);
+    const noTokenCount = users.length - tokens.length;
+
     if (tokens.length === 0) {
       logger.warn('[NotificationService] No tokens available for broadcast.');
-      return;
+      return { successCount: 0, failureCount: users.length, recipientCount: users.length };
     }
 
-    await this.sendMulticastFCM(tokens, title, body, data);
+    const report = await this.sendMulticastFCM(tokens, title, body, data);
+    return {
+      successCount: report.successCount,
+      failureCount: report.failureCount + noTokenCount,
+      recipientCount: users.length,
+    };
   }
 
   /**
    * Broadcasts a notification to a specific audience group.
    */
   async sendToAudience(
-    audience: 'all' | 'quiz_participants' | 'challenge_participants',
+    audience: 'all' | 'quiz_participants' | 'challenge_participants' | 'selected_users',
     title: string,
     body: string,
+    targetUserIds?: string[],
     data?: Record<string, unknown>
-  ): Promise<void> {
+  ): Promise<{ successCount: number; failureCount: number; recipientCount: number }> {
     if (audience === 'all') {
-      await this.broadcastAll(title, body, data);
-      return;
+      return this.broadcastAll(title, body, data);
+    }
+
+    if (audience === 'selected_users') {
+      if (!targetUserIds || targetUserIds.length === 0) {
+        logger.warn('[NotificationService] No target user IDs provided for selected_users audience.');
+        return { successCount: 0, failureCount: 0, recipientCount: 0 };
+      }
+      return this.sendToMultiple(targetUserIds, NotificationType.PROMOTIONAL, title, body, data);
     }
 
     let userIds: string[] = [];
@@ -195,9 +219,10 @@ export class NotificationService {
     }
 
     if (userIds.length > 0) {
-      await this.sendToMultiple(userIds, NotificationType.PROMOTIONAL, title, body, data);
+      return this.sendToMultiple(userIds, NotificationType.PROMOTIONAL, title, body, data);
     } else {
       logger.warn(`[NotificationService] No users found for audience group: ${audience}`);
+      return { successCount: 0, failureCount: 0, recipientCount: 0 };
     }
   }
 
@@ -209,8 +234,14 @@ export class NotificationService {
     title: string,
     body: string,
     data?: Record<string, unknown>
-  ): Promise<void> {
-    if (!messaging) return;
+  ): Promise<{ successCount: number; failureCount: number; recipientCount: number }> {
+    let successCount = 0;
+    let failureCount = 0;
+    const recipientCount = tokens.length;
+
+    if (!messaging) {
+      return { successCount: 0, failureCount: recipientCount, recipientCount };
+    }
 
     const dataPayload = data ? Object.keys(data).reduce((acc, key) => {
       acc[key] = String(data[key]);
@@ -235,6 +266,8 @@ export class NotificationService {
         };
 
         const response = await messaging.sendEachForMulticast(payload);
+        successCount += response.successCount;
+        failureCount += response.failureCount;
         logger.info(`[NotificationService] Multicast batch sent: ${response.successCount} successes, ${response.failureCount} failures.`);
 
         // Handle invalid/expired tokens (clean up) if needed
@@ -259,8 +292,11 @@ export class NotificationService {
         }
       } catch (err) {
         logger.error(`[NotificationService] Error sending multicast batch starting at index ${i}:`, err);
+        failureCount += chunk.length;
       }
     }
+
+    return { successCount, failureCount, recipientCount };
   }
 
   /**
