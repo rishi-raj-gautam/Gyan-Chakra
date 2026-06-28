@@ -22,13 +22,41 @@ export class UserController {
 
   async updateProfile(req: AuthRequest, res: Response, next: NextFunction) {
     try {
+      logger.info(`[UserController] updateProfile initiated. User ID: ${req.user?.userId || 'unknown'}`);
+      logger.info(`[UserController] Incoming headers: ${JSON.stringify(req.headers)}`);
+      logger.info(`[UserController] Request body: ${JSON.stringify(req.body)}`);
+
       const allowedFields = ['name', 'email', 'city', 'aboutMe', 'dateOfBirth', 'fcmToken'];
       const updates: Record<string, any> = {};
       allowedFields.forEach((f) => { if (req.body[f] !== undefined) updates[f] = req.body[f]; });
 
+      logger.info(`[UserController] Allowed fields parsed for update: ${JSON.stringify(updates)}`);
+
+      if (updates.fcmToken !== undefined) {
+        logger.info(`[FCM Sync] User ${req.user!.userId} is attempting to update FCM token to: "${updates.fcmToken}"`);
+      }
+
       const user = await userRepository.update(req.user!.userId, updates);
+      
+      if (!user) {
+        logger.error(`[UserController] Profile update failed. User with ID ${req.user!.userId} not found in database.`);
+        throw ApiError.notFound('User not found');
+      }
+
+      if (updates.fcmToken !== undefined) {
+        logger.info(`[FCM Sync] Token successfully saved in MongoDB for user ${req.user!.userId}. Stored token: "${user.fcmToken}"`);
+      }
+
+      logger.info(`[UserController] Profile updated successfully for user: ${user._id}`);
       return sendSuccess(res, 'Profile updated', user);
-    } catch (e) { next(e); }
+    } catch (e: any) {
+      logger.error('[UserController] Error in updateProfile:', {
+        message: e.message,
+        stack: e.stack,
+        userId: req.user?.userId
+      });
+      next(e);
+    }
   }
 
   async deleteAccount(req: AuthRequest, res: Response, next: NextFunction) {
@@ -124,6 +152,30 @@ export class UserController {
       }
 
       return sendSuccess(res, `User ${status} successfully`, user);
+    } catch (e) { next(e); }
+  }
+
+  async sendTestPushToSelf(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const userId = req.user!.userId;
+      logger.info(`[UserController] sendTestPushToSelf initiated by user ${userId}`);
+      const user = await userRepository.findById(userId);
+      if (!user) throw ApiError.notFound('User not found');
+      if (!user.fcmToken) {
+        logger.warn(`[UserController] User ${userId} has no registered FCM token.`);
+        throw ApiError.badRequest('User does not have an FCM token registered');
+      }
+
+      logger.info(`[UserController] Sending test push to user ${userId} with token ${user.fcmToken}`);
+      const success = await notificationService.sendToUser(
+        userId,
+        NotificationType.SYSTEM,
+        'Test Push Notification 🔔',
+        'Hello from Gyaan Chakra! This is a test notification to verify your device token.',
+        { type: 'test_push', timestamp: new Date().toISOString() }
+      );
+
+      return sendSuccess(res, 'Test push dispatched', { success, token: user.fcmToken });
     } catch (e) { next(e); }
   }
 }

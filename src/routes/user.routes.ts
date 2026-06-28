@@ -37,6 +37,7 @@ const router = Router();
  */
 router.get('/profile', authMiddleware, (req, res, next) => userController.getProfile(req as any, res, next));
 router.put('/profile', authMiddleware, (req, res, next) => userController.updateProfile(req as any, res, next));
+router.post('/profile/test-push', authMiddleware, (req, res, next) => userController.sendTestPushToSelf(req as any, res, next));
 
 /**
  * @swagger
